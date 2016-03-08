@@ -4,9 +4,11 @@ Capstone Final Project Proposal
 
 To more precisely determine the likelihood that a person, upon receiving a credit line from a bank, will experience a serious delinquency within two years. This project defines a serious delinquency as being 90 or more days late on payment. 
 
+
 2)	Who is your client and why do they care about this problem?
 
 My client is an anonymous bank. Understanding and managing credit risk is vital to a bank’s profitability. Achieving a more accurate predictive credit scoring model allows the bank to make better lending decisions.  
+
 
 3)	What data are you going to use for this? How will you acquire this data?
 
@@ -16,16 +18,17 @@ The same twelve variables are used for both data sets: subject id, age, number o
 
 The dependent variable is a binary outcome predicting whether the subject will (1) or will not (0) experience a serious delinquency within two years of being issued this bank’s credit. The test set has left this variable as NA for all observations. 
 
+
 4)	In brief, outline your approach to solving this problem (knowing that this might change later). 
 
 I will begin with data wrangling and cleaning. Once I’m confident that the variables will provide me with statistically significant information, I’ll start exploring how they interact with each other. Visualizing the data within R will be an important part of this step.  After this initial exploration, I’ll use some relatively advanced analytical methods to better assess any data information I’ve concluded as being important. This will include the use of predictive models to provide me with outcomes for my dependent variable. I’ll repeat this process until I’m content with the result. 
 
+
 5)	What are your deliverables?
 
 My deliverables will be:
-
-1) Any code I’ve used within R.
-2) A final paper explaining the process I’ve stated within my outline. 
+  a) Any code I’ve used within R.
+  b) A final paper explaining the process I’ve stated within my outline. 
 
 These will be added to my github repository.
 
