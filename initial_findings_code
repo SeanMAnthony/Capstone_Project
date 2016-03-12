@@ -1,0 +1,206 @@
+---
+title: "initial findings"
+author: "Sean Anthony"
+date: "March 11, 2016"
+output: html_document
+---
+# load data
+setwd("C:/Users/Sean/Desktop") # your file location
+train <- read.csv('cs-training.csv')
+str(train)
+colnames(train)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 'past90', 're_lines', 'past60', 'depend')
+str(train)
+
+test <- read.csv('cs-test.csv')
+str(test)
+colnames(test)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 'past90', 're_lines', 'past60', 'depend')
+test$delinq <- as.integer(test$delinq)
+str(test)
+
+# install packages that will be used for wrangling/cleaning data
+install.packages('tidyr')
+install.packages('dplyr')
+install.packages('ggplot2')
+
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+# data cleaning and wrangling
+
+train1 <- train
+train1 <- tbl_df(train1)
+summary(train1)
+
+# look more closely at each variable
+
+# delinq: 0 = .9330927, 1 = .0669073
+table(train3$delinq)
+
+# rev_util: filter for only observations within 3 standard deviations
+quantile(train1$rev_util, .997)
+train1 <- filter(train1, rev_util <= 1.760802)
+
+# age: remove the one '0' observation, filter w/i 3sdv
+quantile(train1$age, .997)
+train1 <- filter(train1, age > 0 & age <= 91)
+
+# past30: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past30, .997)
+train1 <- filter(train1, past30 <= 6)
+
+# past60: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past60, .997)
+train1 <- filter(train1, past60 <= 3)
+
+# past90: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past90, .997)
+train1 <- filter(train1, past90 <= 6)
+
+# debt_ratio, filter w/i 3sdv
+quantile(train$debt_ratio, .997)
+train1 <- filter(train1, debt_ratio <= 7300.006)
+
+# open_lines: filter w/i 3sdv
+quantile(train$open_lines, .997)
+train1 <- filter(train1, open_lines <= 29)
+
+# depend: treat N/A as 0, filter w/i 3sdv
+quantile(train$depend, .997)
+train1$depend[is.na(train1$depend)] <- 0
+train1 <- filter(train1, depend <= 6)
+
+# re_lines: filter w/i 3sdv
+quantile(train$re_lines, .997)
+train1 <- filter(train1, re_lines <= 7)
+
+# monthly_inc: impute NAs w/ means, filter w/i 3sdv
+mean_values <- subset(train1, monthly_inc >= 0)
+mean(mean_values$monthly_inc)
+train2 <- train1
+train2 <- replace(train2, is.na(train2), "6645")
+train2$monthly_inc <- as.numeric(train2$monthly_inc)
+quantile(train2$monthly_inc, .997)
+train2 <- filter(train2, monthly_inc <= 40000)
+ggplot(aes(monthly_inc), data = train2) + geom_histogram(color = I('black'), fill = I('#F79420'))
+# graph is skewed due to the mean values, need to figure out a way to change this...for now, i'm going to create a data set omitting all the NAs and use that
+
+train3 <- na.omit(train1)
+quantile(train3$monthly_inc, .997)
+train3 <- filter(train3, monthly_inc <= 44663.04)
+ggplot(aes(monthly_inc), data = train3) + geom_histogram(color = I('black'), fill = I('#F79420'))
+
+# SUMMARY OF CHANGES TO TRAIN DATA SET
+# train: original data set
+# train1: data set with monthly_inc NAs still NA
+# train2: data set with monthly_inc NAs now the means, along with filtering top .003 
+# train3: train1 without the NAs, along with filtering top .003 
+
+### moving on to eda
+
+install.packages('caTools')
+library(caTools)
+
+# split training data into train and test sets for internal validation
+
+split <- sample.split(train3$delinq, SplitRatio = 0.60)
+split
+train3Train <- subset(train3, split == TRUE)
+train3Test <- subset(train3, split == FALSE)
+prop.table(table(train3Train$delinq))
+prop.table(table(train3Test$delinq))
+
+# check correlation between all variables of set
+cor(train3Train)
+
+# highest correlation with delinq is past90, I'll start there. 
+
+# build logistic regression model.
+TrainLog <- glm(delinq ~ past90, data = train3Train, family = binomial)
+summary(TrainLog)
+
+# make predictions on training set
+predictTrain <- predict(TrainLog, type = 'response')
+summary(predictTrain)
+table(predictTrain)
+predictTrain
+
+# are we predicting higher probability for delinquencies?
+tapply(predictTrain, train3Train$delinq, mean) # Yes
+
+# use ROC curves
+install.packages('ROCR')
+library(ROCR)
+
+# plot ROC curve
+ROCRpred = prediction(predictTrain, train3Train$delinq)
+ROCRperf = performance(ROCRpred, 'tpr', 'fpr')
+plot(ROCRperf)
+plot(ROCRperf, colorize = TRUE, print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7))
+as.numeric(performance(ROCRpred, 'auc')@y.values) 
+# AUC .6436484
+
+# make predictions on training test set
+predictTrainTest <- predict(TrainLog, type = 'response', newdata = train3Test)
+table(train3Test$delinq, predictTrainTest > 0.5)
+
+ROCRpredTrainTest = prediction(predictTrainTest, train3Test$delinq)
+as.numeric(performance(ROCRpredTrainTest, 'auc')@y.values)
+# AUC .6418698
+
+# make predictions on test data
+predictTest <- predict(TrainLog, type = 'response', newdata = test)
+summary(predictTest)
+head(predictTest)
+table(predictTest)
+# unable to use prediction function due to classes being more than 2. Not sure what this means, but will just add the probabilities to the test set and submit the prediction w/o figuring out the auc myself. Is this normal?
+
+test$Probability <- predictTest
+
+# make a submission here: https://www.kaggle.com/c/GiveMeSomeCredit/submissions/attach
+
+submission <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission, file = 'firsttry.csv', row.names = FALSE)
+# SCORE = 0.656937
+
+
+
+
+
+# try to improve the first model
+
+# add the rev_util variable to first model
+TrainLog1 <- glm(delinq ~ past90 + rev_util, data = train3Train, family = binomial)
+summary(TrainLog1)
+
+# make predictions on training set
+predictTrain1 <- predict(TrainLog1, type = 'response')
+summary(predictTrain1)
+tapply(predictTrain, train3Train$delinq, mean)
+ROCRpred1 = prediction(predictTrain1, train3Train$delinq)
+ROCRperf1 = performance(ROCRpred1, 'tpr', 'fpr')
+plot(ROCRperf1)
+plot(ROCRperf1, colorize = TRUE)
+as.numeric(performance(ROCRpred1, 'auc')@y.values) 
+# AUC .796595
+
+# make predictions on training test set
+predictTrainTest1 <- predict(TrainLog1, type = 'response', newdata = train3Test)
+table(train3Test$delinq, predictTrainTest1 > 0.5)
+
+ROCRpredTrainTest1 = prediction(predictTrainTest1, train3Test$delinq)
+as.numeric(performance(ROCRpredTrainTest1, 'auc')@y.values)
+# AUC 0.799482
+
+# make predictions on test data
+test <- test[1:12]
+predictTest1 <- predict(TrainLog1, type = 'response', newdata = test)
+summary(predictTest1)
+head(predictTest1)
+
+test$Probability <- predictTest1
+
+# make another submission
+submission1 <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission1, file = 'secondtry.csv', row.names = FALSE)
+# SCORE = 0.808294
