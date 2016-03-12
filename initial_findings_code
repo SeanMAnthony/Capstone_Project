@@ -8,12 +8,14 @@ output: html_document
 setwd("C:/Users/Sean/Desktop") # your file location
 train <- read.csv('cs-training.csv')
 str(train)
-colnames(train)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 'past90', 're_lines', 'past60', 'depend')
+colnames(train)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 
+'past90', 're_lines', 'past60', 'depend')
 str(train)
 
 test <- read.csv('cs-test.csv')
 str(test)
-colnames(test)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 'past90', 're_lines', 'past60', 'depend')
+colnames(test)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 
+'past90', 're_lines', 'past60', 'depend')
 test$delinq <- as.integer(test$delinq)
 str(test)
 
@@ -83,7 +85,8 @@ train2$monthly_inc <- as.numeric(train2$monthly_inc)
 quantile(train2$monthly_inc, .997)
 train2 <- filter(train2, monthly_inc <= 40000)
 ggplot(aes(monthly_inc), data = train2) + geom_histogram(color = I('black'), fill = I('#F79420'))
-# graph is skewed due to the mean values, need to figure out a way to change this...for now, i'm going to create a data set omitting all the NAs and use that
+# graph is skewed due to the mean values, need to figure out a way to change this...for now, 
+i'm going to create a data set omitting all the NAs and use that
 
 train3 <- na.omit(train1)
 quantile(train3$monthly_inc, .997)
@@ -153,7 +156,9 @@ predictTest <- predict(TrainLog, type = 'response', newdata = test)
 summary(predictTest)
 head(predictTest)
 table(predictTest)
-# unable to use prediction function due to classes being more than 2. Not sure what this means, but will just add the probabilities to the test set and submit the prediction w/o figuring out the auc myself. Is this normal?
+# unable to use prediction function due to classes being more than 2. Not sure what this means, 
+but will just add the probabilities to the test set and submit the prediction w/o figuring out the auc myself. 
+Is this normal?
 
 test$Probability <- predictTest
 
