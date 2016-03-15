@@ -1,0 +1,288 @@
+
+# install packages that will be used for wrangling/cleaning data
+install.packages('tidyr')
+install.packages('dplyr')
+install.packages('ggplot2')
+install.packages('Hmisc')
+install.packages('caTools')
+install.packages('ROCR')
+
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(Hmisc)
+library(caTools)
+library(ROCR)
+
+# load data
+setwd("C:/Users/Sean/Desktop") # your file location
+train <- read.csv('cs-training.csv')
+str(train)
+colnames(train)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 
+'past90', 're_lines', 'past60', 'depend')
+str(train)
+
+test <- read.csv('cs-test.csv')
+str(test)
+colnames(test)[1:12] <- c('Id', 'delinq', 'rev_util', 'age', 'past30', 'debt_ratio', 'monthly_inc', 'open_lines', 
+'past90', 're_lines', 'past60', 'depend')
+test$delinq <- as.integer(test$delinq)
+str(test)
+
+# data cleaning and wrangling
+
+train1 <- train
+train1 <- tbl_df(train1)
+summary(train1)
+
+# look more closely at each variable
+
+# rev_util: filter for only observations within 3 standard deviations
+quantile(train1$rev_util, .997)
+train1 <- filter(train1, rev_util <= 1.760802)
+
+# age: remove the one '0' observation, filter w/i 3sdv
+quantile(train1$age, .997)
+train1 <- filter(train1, age > 0 & age <= 91)
+
+# past30: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past30, .997)
+train1 <- filter(train1, past30 <= 6)
+
+# past60: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past60, .997)
+train1 <- filter(train1, past60 <= 3)
+
+# past90: remove 96 and 98s; filter w/i 3sdv
+quantile(train$past90, .997)
+train1 <- filter(train1, past90 <= 6)
+
+# debt_ratio, filter w/i 3sdv
+quantile(train$debt_ratio, .997)
+train1 <- filter(train1, debt_ratio <= 7300.006)
+
+# open_lines: filter w/i 3sdv
+quantile(train$open_lines, .997)
+train1 <- filter(train1, open_lines <= 29)
+
+# depend: treat N/A as 0, filter w/i 3sdv
+quantile(train$depend, .997)
+train1$depend[is.na(train1$depend)] <- 0
+train1 <- filter(train1, depend <= 6)
+
+# re_lines: filter w/i 3sdv
+quantile(train$re_lines, .997)
+train1 <- filter(train1, re_lines <= 7)
+
+# monthly_inc: impute NAs w/ means, filter w/i 3sdv
+set.seed(187)
+train1$monthly_inc <- impute(train1$monthly_inc, fun = 'random')
+train
+quantile(train$monthly_inc, .997, na.rm = TRUE)
+train1 <- filter(train1, monthly_inc <= 45000)
+ggplot(aes(monthly_inc), data = train1) + geom_histogram(color = I('black'), fill = I('#F79420'))
+
+# delinq (dependent variable): 0 = .93585958, 1 = .06414042
+prop.table(table(train1$delinq))
+
+# create an identical data frame to use for modeling
+train2 <- train1
+
+# split training data into train and test sets for internal validation
+# use package 'caTools'
+
+split <- sample.split(train2$delinq, SplitRatio = 0.60)
+split
+train2Train <- subset(train2, split == TRUE)
+train2Test <- subset(train2, split == FALSE)
+prop.table(table(train2Train$delinq))
+prop.table(table(train2Test$delinq))
+
+# check correlation between all variables of set
+cor(train2Train)
+
+# highest correlation with delinq is past90, I'll start there. 
+
+# build logistic regression model.
+TrainLog <- glm(delinq ~ past90, data = train2Train, family = binomial)
+summary(TrainLog)
+
+# make predictions on training set
+predictTrain <- predict(TrainLog, type = 'response')
+summary(predictTrain)
+table(predictTrain)
+predictTrain
+
+# are we predicting higher probability for delinquencies?
+tapply(predictTrain, train2Train$delinq, mean) # Yes
+
+# use ROC curves (package 'ROCR')
+
+# plot ROC curve
+ROCRpred = prediction(predictTrain, train2Train$delinq)
+ROCRperf = performance(ROCRpred, 'tpr', 'fpr')
+plot(ROCRperf)
+plot(ROCRperf, colorize = TRUE, print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7))
+as.numeric(performance(ROCRpred, 'auc')@y.values) 
+# AUC: 0.6469294
+
+# make predictions on training test set
+predictTrainTest <- predict(TrainLog, type = 'response', newdata = train2Test)
+table(train2Test$delinq, predictTrainTest > 0.5)
+
+ROCRpredTrainTest = prediction(predictTrainTest, train2Test$delinq)
+as.numeric(performance(ROCRpredTrainTest, 'auc')@y.values)
+# AUC: 0.6495869
+
+# make predictions on test data
+predictTest <- predict(TrainLog, type = 'response', newdata = test)
+summary(predictTest)
+head(predictTest)
+table(predictTest)
+
+test$Probability <- predictTest
+
+# submit my data
+submission <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission, file = 'logregmodel1.csv', row.names = FALSE)
+### SCORE = 0.656937
+
+
+
+# try to improve the first model
+# build 2nd model
+# add the rev_util variable to first model
+TrainLog1 <- glm(delinq ~ past90 + rev_util, data = train2Train, family = binomial)
+summary(TrainLog1)
+
+# make predictions on training set
+predictTrain1 <- predict(TrainLog1, type = 'response')
+summary(predictTrain1)
+tapply(predictTrain1, train2Train$delinq, mean)
+ROCRpred1 = prediction(predictTrain1, train2Train$delinq)
+ROCRperf1 = performance(ROCRpred1, 'tpr', 'fpr')
+plot(ROCRperf1)
+plot(ROCRperf1, colorize = TRUE)
+as.numeric(performance(ROCRpred1, 'auc')@y.values) 
+# AUC: 0.8072873
+
+# make predictions on training test set
+predictTrainTest1 <- predict(TrainLog1, type = 'response', newdata = train2Test)
+table(train2Test$delinq, predictTrainTest1 > 0.5)
+
+ROCRpredTrainTest1 = prediction(predictTrainTest1, train2Test$delinq)
+as.numeric(performance(ROCRpredTrainTest1, 'auc')@y.values)
+# AUC: 0.8074688
+
+# make predictions on test data
+test <- test[1:12]
+predictTest1 <- predict(TrainLog1, type = 'response', newdata = test)
+summary(predictTest1)
+head(predictTest1)
+
+test$Probability <- predictTest1
+
+# submit my data
+submission1 <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission1, file = 'logregmodel2.csv', row.names = FALSE)
+### SCORE = 0.807918
+
+
+
+# 3rd model: Use all past due variables to see if multicollinearity might exist
+# build 3rd model
+TrainLog2 <- glm(delinq ~ past90 + rev_util + past30 + past60, data = train2Train, family = binomial)
+summary(TrainLog2)
+# lowest AIC so far is a good sign
+
+# make predictions on training set
+predictTrain2 <- predict(TrainLog2, type = 'response')
+summary(predictTrain2)
+table(predictTrain2)
+predictTrain2
+
+# are we predicting higher probability for delinquencies?
+tapply(predictTrain2, train2Train$delinq, mean) # Yes
+
+# use ROC curves
+# plot ROC curve
+ROCRpred2 = prediction(predictTrain2, train2Train$delinq)
+ROCRperf2 = performance(ROCRpred2, 'tpr', 'fpr')
+plot(ROCRperf2)
+plot(ROCRperf2, colorize = TRUE, print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7))
+as.numeric(performance(ROCRpred2, 'auc')@y.values) 
+# AUC: 0.8403925
+
+# make predictions on training test set
+predictTrainTest2 <- predict(TrainLog2, type = 'response', newdata = train2Test)
+table(train2Test$delinq, predictTrainTest2 > 0.5)
+
+ROCRpredTrainTest2 = prediction(predictTrainTest2, train2Test$delinq)
+as.numeric(performance(ROCRpredTrainTest2, 'auc')@y.values)
+# AUC: 0.8421454
+
+# make predictions on test data
+test <- test[1:12]
+predictTest2 <- predict(TrainLog2, type = 'response', newdata = test)
+summary(predictTest2)
+head(predictTest2)
+table(predictTest2)
+
+test$Probability <- predictTest2
+
+# submit my data
+submission2 <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission2, file = 'logregmodel3.csv', row.names = FALSE)
+### SCORE = 0.842166
+
+
+
+# Still worried about multicollinearity between the three past due variables
+# Least positive coefficient of the three is past30, will take this out for 4th model
+# Build 4th model
+
+TrainLog3 <- glm(delinq ~ past90 + rev_util + past60, data = train2Train, family = binomial)
+summary(TrainLog3)
+# higher AIC than last model, not that confident this model will be superior
+
+# make predictions on training set
+predictTrain3 <- predict(TrainLog3, type = 'response')
+summary(predictTrain3)
+table(predictTrain3)
+predictTrain3
+
+# are we predicting higher probability for delinquencies?
+tapply(predictTrain3, train2Train$delinq, mean) # Not > than model 3
+
+# use ROC curves
+# plot ROC curve
+ROCRpred3 = prediction(predictTrain3, train2Train$delinq)
+ROCRperf3 = performance(ROCRpred3, 'tpr', 'fpr')
+plot(ROCRperf3)
+plot(ROCRperf3, colorize = TRUE, print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7))
+as.numeric(performance(ROCRpred3, 'auc')@y.values) 
+# AUC: 0.822611
+
+# make predictions on training test set
+predictTrainTest3 <- predict(TrainLog3, type = 'response', newdata = train2Test)
+table(train2Test$delinq, predictTrainTest3 > 0.5)
+
+ROCRpredTrainTest3 = prediction(predictTrainTest3, train2Test$delinq)
+as.numeric(performance(ROCRpredTrainTest3, 'auc')@y.values)
+# AUC: 0.8229357
+
+# make predictions on test data
+test <- test[1:12]
+predictTest3 <- predict(TrainLog3, type = 'response', newdata = test)
+summary(predictTest3)
+head(predictTest3)
+table(predictTest3)
+
+test$Probability <- predictTest3
+
+# submit my data
+
+submission3 <- data.frame(Id = test$Id, Probability = test$Probability)
+write.csv(submission3, file = 'logregmodel4.csv', row.names = FALSE)
+### SCORE: 0.822529
+# third model still best
